@@ -43,7 +43,7 @@ class WSDModel(nn.Module):
         self.layer_norm = nn.LayerNorm([self.D])
         self.pos_encoder = None
         if use_positional_encoding:
-            self.pos_encoder = PositionalEncoding(V, dropout_prob)
+            self.pos_encoder = PositionalEncoding(D, dropout_prob)
         self.causal= causal
 
     def attention(self, X, Q, mask):
@@ -102,7 +102,7 @@ class WSDModel(nn.Module):
             # Look up the gather() and expand() methods in PyTorch.
 
         else:
-            # TODO Part 3: Your Code Here.
+
             Q = self.E_v(M_s)
         if self.pos_encoder:
             Q = self.pos_encoder(Q)
