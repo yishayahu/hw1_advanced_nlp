@@ -2,11 +2,27 @@ import torch
 from torch import nn
 import torch.nn.init as init
 import math
+import numpy as np
+class PositionalEncoding(nn.Module):
 
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
 
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        x = x + self.pe[:x.size(0), :]
+        return self.dropout(x)
 class WSDModel(nn.Module):
 
-    def __init__(self, V, Y, D=300, dropout_prob=0.2, use_padding=False):
+    def __init__(self, V, Y, D=300, dropout_prob=0.2, use_padding=False,use_positional_encoding=False,causal=False):
         super(WSDModel, self).__init__()
         self.use_padding = use_padding
 
@@ -25,6 +41,10 @@ class WSDModel(nn.Module):
         self.dropout_layer = nn.Dropout(p=dropout_prob)
         self.softmax = torch.nn.Softmax(dim=-1)
         self.layer_norm = nn.LayerNorm([self.D])
+        self.pos_encoder = None
+        if use_positional_encoding:
+            self.pos_encoder = PositionalEncoding(V, dropout_prob)
+        self.causal= causal
 
     def attention(self, X, Q, mask):
         """
@@ -43,19 +63,25 @@ class WSDModel(nn.Module):
         Q_c = None
         A = None        
         
-        # TODO Part 1: Your code here.
+
         # Have a look at the difference between torch.matmul() and torch.bmm().
-        raise NotImplementedError()
+        A = torch.matmul(Q, self.W_A)
+        A = torch.matmul(A, X.transpose(-2, -1))
+
+
 
         if self.use_padding:
-            # TODO part 2: Your code here.
-            raise NotImplementedError()
 
-        # TODO Part 1: continue.
+            A[A==self.pad_id] = -10000
+            if self.causal:
+                A = A + torch.tensor(np.triu(np.full(A.shape, -10000), k=1),device=A.device)
+        A = self.softmax(A)
+        Q_c = torch.matmul(A, X)
+        Q_c = torch.matmul(Q_c, self.W_O)
 
         return Q_c, A.squeeze()
 
-    def forward(self, M_s, v_q=None):
+    def forward(self, M_s, v_q=None,):
         """
         :param M_s:
             [B, N] dimensional matrix containing token integer ids
@@ -70,12 +96,16 @@ class WSDModel(nn.Module):
         
         Q = None
         if v_q is not None:
-            # TODO Part 1: Your Code Here.
+
+            Q = torch.gather(M_s, 1, v_q.unsqueeze(1))
+            Q = self.E_v(Q)
             # Look up the gather() and expand() methods in PyTorch.
-            raise NotImplementedError()
+
         else:
             # TODO Part 3: Your Code Here.
-            raise NotImplementedError()
+            Q = self.E_v(M_s)
+        if self.pos_encoder:
+            Q = self.pos_encoder(Q)
             
 
         mask = M_s.ne(self.pad_id)
