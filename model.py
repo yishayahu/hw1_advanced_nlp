@@ -11,8 +11,8 @@ def relative_position(length):
     range_vec_q = torch.arange(length)
     range_vec_k = torch.arange(length)
     distance_mat = range_vec_k[None, :] - range_vec_q[:, None]
-
-    final_mat = torch.LongTensor(abs(distance_mat)).cuda()
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device('cpu')
+    final_mat = torch.LongTensor(abs(distance_mat)).to(device)
 
 
     return final_mat
@@ -69,9 +69,9 @@ class WSDModel(nn.Module):
         if self.use_padding:
             mask = torch.broadcast_to(mask.unsqueeze(1),A.shape)
 
-            A[~mask] = -10000
-            if self.causal:
-                A = A + torch.tensor(np.triu(np.full(A.shape, -10000), k=1),device=A.device)
+            A[~mask] = -10000 # -10000 is -inf in hugging faces repo
+        if self.causal:
+            A = A + torch.tensor(np.triu(np.full(A.shape, -10000), k=1),device=A.device)
         if self.pos_encoder:
             rel = self.pos_encoder(A.shape[-1])
             A = A + rel
