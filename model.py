@@ -71,7 +71,8 @@ class WSDModel(nn.Module):
 
 
         if self.use_padding:
-
+            if mask.shape != A.shape:
+                mask = mask.unsqueeze(1)
             A[~mask] = -10000
             if self.causal:
                 A = A + torch.tensor(np.triu(np.full(A.shape, -10000), k=1),device=A.device)
