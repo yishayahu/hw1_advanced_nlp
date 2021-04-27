@@ -5,7 +5,7 @@ import math
 import numpy as np
 class PositionalEncoding(nn.Module):
 
-    def __init__(self, d_model, dropout=0.1, max_len=5000):
+    def __init__(self, d_model, dropout=0.0, max_len=270):
         super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
 
@@ -43,7 +43,7 @@ class WSDModel(nn.Module):
         self.layer_norm = nn.LayerNorm([self.D])
         self.pos_encoder = None
         if use_positional_encoding:
-            self.pos_encoder = PositionalEncoding(D, dropout_prob)
+            self.pos_encoder = PositionalEncoding(D)
         self.causal= causal
 
     def attention(self, X, Q, mask):
@@ -72,7 +72,7 @@ class WSDModel(nn.Module):
 
         if self.use_padding:
 
-            A[A==self.pad_id] = -10000
+            A[~mask] = -10000
             if self.causal:
                 A = A + torch.tensor(np.triu(np.full(A.shape, -10000), k=1),device=A.device)
         A = self.softmax(A)
@@ -81,7 +81,7 @@ class WSDModel(nn.Module):
 
         return Q_c, A.squeeze()
 
-    def forward(self, M_s, v_q=None,):
+    def forward(self, M_s, v_q=None):
         """
         :param M_s:
             [B, N] dimensional matrix containing token integer ids
@@ -106,7 +106,7 @@ class WSDModel(nn.Module):
             Q = self.E_v(M_s)
         if self.pos_encoder:
             Q = self.pos_encoder(Q)
-            
+
 
         mask = M_s.ne(self.pad_id)
         Q_c, A = self.attention(X, Q, mask)
