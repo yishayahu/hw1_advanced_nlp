@@ -3,23 +3,19 @@ from torch import nn
 import torch.nn.init as init
 import math
 import numpy as np
-class PositionalEncoding(nn.Module):
 
-    def __init__(self, d_model, dropout=0.0, max_len=270):
-        super(PositionalEncoding, self).__init__()
-        self.dropout = nn.Dropout(p=dropout)
 
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0).transpose(0, 1)
-        self.register_buffer('pe', pe)
+def relative_position(length):
 
-    def forward(self, x):
-        x = x + self.pe[:x.size(0), :]
-        return self.dropout(x)
+
+    range_vec_q = torch.arange(length)
+    range_vec_k = torch.arange(length)
+    distance_mat = range_vec_k[None, :] - range_vec_q[:, None]
+
+    final_mat = torch.LongTensor(abs(distance_mat)).cuda()
+
+
+    return final_mat
 class WSDModel(nn.Module):
 
     def __init__(self, V, Y, D=300, dropout_prob=0.2, use_padding=False,use_positional_encoding=False,causal=False):
@@ -43,7 +39,7 @@ class WSDModel(nn.Module):
         self.layer_norm = nn.LayerNorm([self.D])
         self.pos_encoder = None
         if use_positional_encoding:
-            self.pos_encoder = PositionalEncoding(D)
+            self.pos_encoder = relative_position
         self.causal= causal
 
     def attention(self, X, Q, mask):
@@ -76,6 +72,11 @@ class WSDModel(nn.Module):
             A[~mask] = -10000
             if self.causal:
                 A = A + torch.tensor(np.triu(np.full(A.shape, -10000), k=1),device=A.device)
+        if self.pos_encoder:
+            rel = self.pos_encoder(A.shape[-1])
+            A = A + rel
+
+
         A = self.softmax(A)
         Q_c = torch.matmul(A, X)
         Q_c = torch.matmul(Q_c, self.W_O)
@@ -105,8 +106,7 @@ class WSDModel(nn.Module):
         else:
 
             Q = self.E_v(M_s)
-        if self.pos_encoder:
-            Q = self.pos_encoder(Q)
+
 
 
         mask = M_s.ne(self.pad_id)
